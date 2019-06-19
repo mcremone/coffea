@@ -44,43 +44,41 @@ def coffea_pyapp(dataset, fn, treename, chunksize, index, procstr, timeout=None,
 
     processor_instance = cpkl.loads(lz4f.decompress(procstr))
 
-    for f in fn:
-        afile = None
-        for i in range(5):
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(uproot.open, fn)
-                try:
-                    afile = future.result(timeout=5)
-                except TimeoutError:
-                    afile = None
-                else:
-                    break
+    afile = None
+    for i in range(5):
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(uproot.open, fn)
+            try:
+                afile = future.result(timeout=5)
+            except TimeoutError:
+                afile = None
+            else:
+                break
 
-        if afile is None:
-            raise Exception('unable to open: %s' % fn)
-        tree = None
-        if isinstance(treename, str):
-            tree = afile[treename]
-        elif isinstance(treename, Sequence):
-            for name in reversed(treename):
-                if name in afile:
-                    tree = afile[name]
-        else:
-            raise Exception('treename must be a str or Sequence but is a %s!' % repr(type(treename)))
+    if afile is None:
+        raise Exception('unable to open: %s' % fn)
+    tree = None
+    if isinstance(treename, str):
+        tree = afile[treename]
+    elif isinstance(treename, Sequence):
+        for name in reversed(treename):
+            if name in afile:
+                tree = afile[name]
+    else:
+        raise Exception('treename must be a str or Sequence but is a %s!' % repr(type(treename)))
 
-        if tree is None:
-            raise Exception('No tree found, out of possible tree names: %s' % repr(treename))
+    if tree is None:
+        raise Exception('No tree found, out of possible tree names: %s' % repr(treename))
 
-        df = processor.LazyDataFrame(tree, chunksize, index, flatten=flatten)
-        df['dataset'] = dataset
+    df = processor.LazyDataFrame(tree, chunksize, index, flatten=flatten)
+    df['dataset'] = dataset
 
-        vals = processor_instance.process(df)
-        vals['_bytesread'] = accumulator(afile.source.bytesread if isinstance(afile.source, uproot.source.xrootd.XRootDSource) else 0)
+    vals = processor_instance.process(df)
+    vals['_bytesread'] = accumulator(afile.source.bytesread if isinstance(afile.source, uproot.source.xrootd.XRootDSource) else 0)
     valsblob = lz4f.compress(pkl.dumps(vals), compression_level=lz4_clevel)
 
     istart = chunksize * index
     istop = min(tree.numentries, (index + 1) * chunksize)
-
     return valsblob, (istop - istart), dataset
 
 

@@ -85,7 +85,11 @@ def _work_function(item, flatten=False):
 def _get_chunking(filelist, treename, chunksize, workers=1):
     items = []
     executor = None if len(filelist) < 5 else concurrent.futures.ThreadPoolExecutor(workers)
+    print("inside _get_chunking1")
+    print(executor)
     for fn, nentries in uproot.numentries(filelist, treename, total=False, executor=executor).items():
+        print("inside _get_chunking2")
+
         for index in range(nentries // chunksize + 1):
             items.append((fn, chunksize, index))
     return items
@@ -137,10 +141,15 @@ def run_uproot_job(fileset, treename, processor_instance, executor, executor_arg
 
     items = []
     for dataset, filelist in tqdm(fileset.items(), desc='Preprocessing'):
+        print("in executor1")
         if maxchunks is not None:
+            print("in executor2")
             chunks = _get_chunking_lazy(tuple(filelist), treename, chunksize)
         else:
+            print("in executor3")
+            print(tuple(filelist), treename, chunksize, executor_args['pre_workers'])
             chunks = _get_chunking(tuple(filelist), treename, chunksize, executor_args['pre_workers'])
+            print("in executor4")
 
         for ichunk, chunk in enumerate(chunks):
             if (maxchunks is not None) and (ichunk > maxchunks):

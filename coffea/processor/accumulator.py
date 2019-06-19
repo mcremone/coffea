@@ -42,27 +42,19 @@ class AccumulatorABC(with_metaclass(ABCMeta)):
         return self
 
 
-class value_accumulator(AccumulatorABC):
+class accumulator(AccumulatorABC):
     '''
-    Holds a value of arbitrary type, with identity
-    as constructed by default_factory
+    Holds a value, of type and identity as provided to initializer
     '''
-    def __init__(self, default_factory, initial=None):
-        self.value = default_factory() if initial is None else initial
-        self.default_factory = default_factory
-
-    def __repr__(self):
-        if type(self.default_factory) is type:
-            defrepr = self.default_factory.__name__
-        else:
-            defrepr = repr(self.default_factory)
-        return "value_accumulator(%s, %r)" % (defrepr, self.value)
+    def __init__(self, identity):
+        self.value = identity
+        self._identity = identity
 
     def identity(self):
-        return value_accumulator(self.default_factory)
+        return accumulator(self._identity)
 
     def add(self, other):
-        if isinstance(other, value_accumulator):
+        if isinstance(other, accumulator):
             self.value = self.value + other.value
         else:
             self.value = self.value + other

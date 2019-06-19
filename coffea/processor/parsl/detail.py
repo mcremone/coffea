@@ -49,47 +49,60 @@ def _parsl_stop(dfk):
 
 @python_app
 @timeout
-def derive_chunks(filename, treename, chunksize, ds, timeout=None):
+#def derive_chunks(filename, treename, chunksize, ds, timeout=None):
+def derive_chunks(filelist, treename, chunksize, timeout=None):
     import uproot
     from collections.abc import Sequence
     from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
     uproot.XRootDSource.defaults["parallel"] = False
+    
+    ntot = 0
+    files = []
+    output = []
+    for ds, filename in filelist:
+        afile = None
+        for i in range(5):
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(uproot.open, filename)
+                try:
+                    afile = future.result(timeout=5)
+                except TimeoutError:
+                    afile = None
+                else:
+                    break
 
-    afile = None
-    for i in range(5):
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(uproot.open, filename)
-            try:
-                afile = future.result(timeout=5)
-            except TimeoutError:
-                afile = None
-            else:
-                break
+        if afile is None:
+            raise Exception('unable to open: %s' % filename)
+            
+        afile = uproot.open(filename)
+        tree = None
+        if isinstance(treename, str):
+            tree = afile[treename]
+        elif isinstance(treename, Sequence):
+            for name in reversed(treename):
+                if name in afile:
+                    tree = afile[name]
+        else:
+            raise Exception('treename must be a str or Sequence but is a %s!' % repr(type(treename)))
 
-    if afile is None:
-        raise Exception('unable to open: %s' % filename)
+        if tree is None:
+            raise Exception('No tree found, out of possible tree names: %s' % repr(treename))
 
-    afile = uproot.open(filename)
-    tree = None
-    if isinstance(treename, str):
-        tree = afile[treename]
-    elif isinstance(treename, Sequence):
-        for name in reversed(treename):
-            if name in afile:
-                tree = afile[name]
-    else:
-        raise Exception('treename must be a str or Sequence but is a %s!' % repr(type(treename)))
+        nentries = tree.numentries
+        ntot += nentries
+        files.append(filename)
+        if ntot > chunksize:
+            output.append(ds, treename, [(files, chunksize, index) for index in range(nentries // chunksize + 1)])
+            files = []
+            ntot = 0
 
-    if tree is None:
-        raise Exception('No tree found, out of possible tree names: %s' % repr(treename))
-
-    nentries = tree.numentries
-    return ds, treename, [(filename, chunksize, index) for index in range(nentries // chunksize + 1)]
+    return output
 
 
 def _parsl_get_chunking(filelist, treename, chunksize, status=True, timeout=None):
-    futures = set(derive_chunks(fn, treename, chunksize, ds, timeout=timeout) for ds, fn in filelist)
+    #futures = set(derive_chunks(fn, treename, chunksize, ds, timeout=timeout) for ds, fn in filelist)
+    futures = set(derive_chunks(filelist, treename, chunksize, timeout=timeout))
 
     items = []
 
